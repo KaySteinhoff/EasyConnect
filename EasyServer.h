@@ -73,9 +73,6 @@ struct EasyServer ecCreateServer(char* port, int maxClients, int dataLength)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 	
-	char portStr[16];
-	sprintf(portStr, "&lu", port);
-	
 	if((rv = getaddrinfo(NULL, port, &hints, &ai)) != 0)
 	{
 		AppendToLog(ERR_SERVER_SOCK);
