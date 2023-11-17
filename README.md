@@ -12,7 +12,6 @@ This ofcourse also leads to it being good for C networking beginners.
 - EasyClient
 	- EasyClient callback documentation
 	- EasyClient function documentation
-- EasyError
 - Known issues
 
 ## EasyConnect functions
@@ -777,3 +776,10 @@ int main()
 |---|---|
 |struct EasyClient* client|The client of which the callback is to be set|
 |void (\*func)()|The function pointer to the function that is to be called|
+
+## Known Issues
+
+- poll.h is slow when managing large amounts of fds
+- poll() has a minimum timeout of 1 millisecond. Although I don't think I would be able to check all connections for send data in under 1 millisecond changing it(without a dependency) would be better
+- EasyServer and EasyClient use different ways of assigning ports
+- Only TCP support UDP still has to be implemented

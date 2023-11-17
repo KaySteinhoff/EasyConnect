@@ -61,7 +61,7 @@ int ecdel_pfd(struct PFDList* list, int i)
 	list->length--;
 }
 
-struct EasyServer ecCreateServer(const char* port, int maxClients, int dataLength)
+struct EasyServer ecCreateServer(char* port, int maxClients, int dataLength)
 {
 	struct EasyServer server;
 	int rv;
@@ -72,6 +72,9 @@ struct EasyServer ecCreateServer(const char* port, int maxClients, int dataLengt
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
+	
+	char portStr[16];
+	sprintf(portStr, "&lu", port);
 	
 	if((rv = getaddrinfo(NULL, port, &hints, &ai)) != 0)
 	{
@@ -133,7 +136,7 @@ void ecStopServer(struct EasyServer* server)
 	for(int i = 1; i < server->list.length; ++i)
 	{
 		close(server->list.pfds[i].fd);
-		ecdel_fd(&server->list, i-1);
+		ecdel_pfd(&server->list, i-1);
 	}
 }
 
@@ -227,7 +230,7 @@ int ecKickClient(struct EasyServer* server, int index)
 		return 0;
 	
 	close(server->list.pfds[index+1].fd);
-	ecdel_fd(&server->list, index);
+	ecdel_pfd(&server->list, index);
 }
 
 int ecUnicast(struct EasyServer server, int index, void* data)

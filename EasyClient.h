@@ -67,27 +67,30 @@ int ecConnectClient(struct EasyClient* client)
 			AppendToLog(ERR_POLL);
 			return 0;
 		}
-		
-		if(num_polls > 0)
-		{
-			int nbytes = recv(client->sockfd, client->data, client->dataLength, 0);
-			
-			if(nbytes <= 0)
-			{
-				if(nbytes == 0)
-				{
-					if(client->ConnectionClosedCallback != 0)
-						client->ConnectionClosedCallback();
-					break;
-				}
 				
-				AppendToLog(ERR_FAULTY_DATA);
-				continue;
+		if(!(client->poll.revents & POLLIN))
+		{
+			client->Update();
+			continue;
+		}
+		
+		int nbytes = recv(client->sockfd, client->data, client->dataLength, 0);
+
+		if(nbytes <= 0)
+		{
+			if(nbytes == 0)
+			{
+				if(client->ConnectionClosedCallback != 0)
+					client->ConnectionClosedCallback();
+				break;
 			}
 			
-			if(client->DataReceivedCallback != 0)
-				client->DataReceivedCallback(client->data);
+			AppendToLog(ERR_FAULTY_DATA);
+			return 0;
 		}
+
+		if(client->DataReceivedCallback != 0)
+			client->DataReceivedCallback(client->data);
 		
 		client->Update();
 	}
