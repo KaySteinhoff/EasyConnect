@@ -99,9 +99,9 @@ To set the callback call the ecServerUpdate() function passing a pointer to the 
 ### EasyServer function documentation
 
 ### ecCreateServer
-This function returns an struct EasyServer instance configured to be used in the ecStartServer() function.
+This function returns a struct EasyServer instance configured to be used in the ecStartServer() function.
 ```C
-struct EasyServer server ecCreateServer(char* port, int maxClients, int dataLength);
+struct EasyServer ecCreateServer(char* port, int maxClients, int dataLength);
 ```
 
 Example:
