@@ -100,7 +100,7 @@ To set the callback call the ecServerUpdate() function passing a pointer to the 
 ### ecCreateServer
 This function returns a struct EasyServer instance configured to be used in the ecStartServer() function.
 ```C
-struct EasyServer ecCreateServer(char* port, int maxClients, int dataLength);
+struct EasyServer ecCreateServer(uint32_t port, int maxClients, int dataLength);
 ```
 
 Example:
@@ -110,7 +110,7 @@ Example:
 int main()
 {
 	InitEasyConnect();
-	struct EasyServer server = ecCreateServer("5000", 10, 64);
+	struct EasyServer server = ecCreateServer(5000, 10, 64);
 	return 0;
 }
 ```
@@ -781,5 +781,5 @@ int main()
 
 - poll.h is slow when managing large amounts of fds
 - poll() has a minimum timeout of 1 millisecond. Although I don't think I would be able to check all connections for send data in under 1 millisecond changing it(without a dependency) would be better
-- EasyServer and EasyClient use different ways of assigning ports
+- EasyClient can only use IPv4
 - Only TCP support UDP still has to be implemented

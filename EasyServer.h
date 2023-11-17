@@ -61,7 +61,7 @@ int ecdel_pfd(struct PFDList* list, int i)
 	list->length--;
 }
 
-struct EasyServer ecCreateServer(char* port, int maxClients, int dataLength)
+struct EasyServer ecCreateServer(uint32_t port, int maxClients, int dataLength)
 {
 	struct EasyServer server;
 	int rv;
@@ -73,12 +73,15 @@ struct EasyServer ecCreateServer(char* port, int maxClients, int dataLength)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 	
-	if((rv = getaddrinfo(NULL, port, &hints, &ai)) != 0)
+	char str[10];
+	sprintf(str, "%d", (long)port);
+	
+	if((rv = getaddrinfo(NULL, str, &hints, &ai)) != 0)
 	{
 		AppendToLog(ERR_SERVER_SOCK);
 		return server;
 	}
-	
+		
 	for(p = ai; p != NULL; p = p->ai_next)
 	{
 		server.serverfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);

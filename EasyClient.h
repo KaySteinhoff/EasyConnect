@@ -17,7 +17,13 @@ struct EasyClient
 struct EasyClient ecCreateClient(uint32_t hostaddress, uint32_t port, int dataLength)
 {
 	struct EasyClient client;
-
+	int rv;
+	struct addrinfo hints, *ai, *p;
+	
+	char portStr[10], addrStr[10];
+	sprintf(portStr, "%d", port);
+	sprintf(addrStr, "%d", hostaddress);
+	
 	client.sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	
 	if(client.sockfd == -1)
