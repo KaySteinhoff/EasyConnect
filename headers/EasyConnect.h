@@ -12,10 +12,3 @@
 #include "EasyError.h"
 #include "EasyClient.h"
 #include "EasyServer.h"
-
-void InitEasyConnect()
-{
-	EasyConnectErrorLog.size = 8;
-	EasyConnectErrorLog.length = 0;
-	EasyConnectErrorLog.log = (char*)malloc(EasyConnectErrorLog.size);
-}

@@ -1,20 +1,6 @@
-struct ErrorLog
-{
-	char* log;
-	int length;
-	int size;
-};
+#include "../headers/EasyConnect.h"
 
-#define ERR_CLIENT_SOCK 0
-#define ERR_FAULTY_DATA 1
-#define ERR_SERVER_SOCK 2
-#define ERR_NO_LISTEN 3
-#define ERR_NO_OPEN_SOCK 4
-#define ERR_POLL 5
-#define ERR_PACKAGE_SEND 6
-#define ERR_NO_UPDATE 7
-
-char *EasyConnectErrorMessages[512] = 
+char *EasyConnectErrorMessages[8] = 
 {
 	"00001: Failed to create client socket\n",
 	"00002: Faulty data received\n",
@@ -30,8 +16,11 @@ struct ErrorLog EasyConnectErrorLog;
 
 int AppendToLog(int errorCode)
 {
-	size_t length = strlen(EasyConnectErrorMessages[errorCode]);
-	
+	int length = strlen(EasyConnectErrorMessages[errorCode]);
+
+	if(EasyConnectErrorLog.length == 0)
+		EasyConnectErrorLog.log = (char*)malloc(length);
+
 	while(length+EasyConnectErrorLog.length > EasyConnectErrorLog.size)
 	{
 		EasyConnectErrorLog.size *= 2;
@@ -45,7 +34,7 @@ int AppendToLog(int errorCode)
 	return 1;
 }
 
-char* GetError()
+char* GetError(void)
 {
 	if(EasyConnectErrorLog.length == 0)
 		return "No errors\n";
