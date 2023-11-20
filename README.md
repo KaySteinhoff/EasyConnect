@@ -43,9 +43,9 @@ int main()
 ```
 
 
-## EasyServer
+# EasyServer
 
-### EasyServer callback documentation
+## EasyServer callback documentation
 
 ### DataReceivedCallback
 This callback is called when a client sends a packet to the server and the read bytes were not faulty(recv returning < 0).
@@ -77,7 +77,7 @@ void ClientLeft(int index);
 
 To set the callback call the ecServerCloseCallback() function passing a pointer to the server struct and the function pointer.
 
-### EasyServer function documentation
+## EasyServer function documentation
 
 ### ecCreateServer
 This function returns a non-zero integer if the server was successfully created.
@@ -420,9 +420,9 @@ int main()
 |int num|The number of receipients|
 |void* data|The package to send|
 
-## EasyClient
+# EasyClient
 
-### EasyClient callback documentation
+## EasyClient callback documentation
 
 ### ConnectionClosedCallback
 This callback is called when the connection is closed from the server side.
