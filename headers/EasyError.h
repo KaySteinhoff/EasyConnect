@@ -15,9 +15,11 @@ struct ErrorLog
 #define ERR_NO_OPEN_SOCK 4
 #define ERR_POLL 5
 #define ERR_PACKAGE_SEND 6
-#define ERR_NO_UPDATE 7
+#define ERR_CONNECT 7
+#define ERR_NO_SERVER 8
 
 int AppendToLog(int errorCode);
 char* GetError(void);
+void SetErrorCallback(void (*func)(char*));
 
 #endif

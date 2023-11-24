@@ -4,6 +4,7 @@ EasyConnect was made with the intention of making networking in C easier.
 
 ### Table of contents
 
+- EasyConnect callbacks
 - EasyConnect functions
 - EasyServer
 	- EasyServer callback documentation
@@ -12,6 +13,16 @@ EasyConnect was made with the intention of making networking in C easier.
 	- EasyClient callback documentation
 	- EasyClient function documentation
 - Known issues
+
+## EasyConnect callbacks
+
+### EasyErrorCallback
+This callback is invoked after an error message was appended to the error log.
+The passed char* is the error message that was appended. To get the log refer to GetError() in the documentation.
+```C
+//Example callback
+void OnError(char* errorMessage);
+```
 
 ## EasyConnect functions
 
@@ -39,6 +50,32 @@ int main()
 	}
 	
 	return 0;
+}
+```
+
+### SetErrorCallback
+This function sets the ErrorCallback to the passed function pointer.
+```C
+void SetErrorCallback(void (*func)(char*));
+```
+
+Example:
+```C
+#include <EasyConnect.h>
+
+void Error(char* errormsg)
+{
+	printf("%s\n", errormsg);
+	exit(-1);
+}
+
+int main()
+{
+	SetErrorCallback(Error);
+
+	ecCreateServer("192.0.0.1", "5000", 10, 64);
+
+	return 0;	
 }
 ```
 
@@ -82,7 +119,7 @@ To set the callback call the ecServerCloseCallback() function passing a pointer 
 ### ecCreateServer
 This function returns a non-zero integer if the server was successfully created.
 ```C
-int ecCreateServer(uint32_t port, int maxClients, int dataLength);
+int ecCreateServer(char* openaddress, uint32_t port, int maxClients, int dataLength);
 ```
 
 Example:
@@ -91,13 +128,14 @@ Example:
 
 int main()
 {
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	return 0;
 }
 ```
 
 |Parameter|Usage|
 |---|---|
+|char* openaddress|The address the server has to use|
 |uint32_t port|The port number to start the server on as a char pointer|
 |int maxClients|The maximum number of clients on the server|
 |int dataLength|The length, in bytes, of the packets send between server and client|
@@ -120,7 +158,7 @@ void closed(int index)
 
 int main()
 {
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerCloseCallback(closed);
 	
@@ -160,7 +198,7 @@ void joined(int index)
 
 int main()
 {
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerClientCallback(joined);
 	
@@ -190,7 +228,7 @@ void closed(int index)
 
 int main()
 {
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerCloseCallback(closed);
 
@@ -219,7 +257,7 @@ void receive(int index, void* data)
 
 int main()
 {
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerDataCallback(receive);
 
@@ -248,7 +286,7 @@ void joined(int index)
 
 int main()
 {
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerClientCallback(joined);
 
@@ -281,7 +319,7 @@ void joined(int index)
 
 int main()
 {
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerClientCallback(joined);
 	
@@ -314,7 +352,7 @@ void joined(int index)
 
 int main()
 {
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerClientCallback(joined);
 	
@@ -350,7 +388,7 @@ void joined(int index)
 
 int main()
 {	
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerClientCallback(joined);
 
@@ -404,7 +442,7 @@ void received(int index, void* data)
 
 int main()
 {	
-	ecCreateServer(5000, 10, 64);
+	ecCreateServer("127.0.0.1", 5000, 10, 64);
 	
 	ecServerClientCallback(joined);
 	ecServerCloseCallback(closed);
@@ -443,7 +481,7 @@ void DataReceived(void* data);
 ### ecCreateClient
 This function returns a non-zero value if te client was successfully created.
 ```C
-int ecCreateClient(uint32_t hostaddress, uint32_t port, int dataLength);
+int ecCreateClient(char* hostaddress, uint32_t port, int dataLength);
 ```
 
 Example:
@@ -452,7 +490,7 @@ Example:
 
 int main()
 {
-	ecCreateClient(INADDR_LOOPBACK, 5000, 64);
+	ecCreateClient("127.0.0.1", 5000, 64);
 	
 	return 0;
 }
@@ -460,7 +498,7 @@ int main()
 
 |Parameters|Usage|
 |---|---|
-|uint32_t hostaddress|The IP to connect to as a 32 bit unsigned integer|
+|char* hostaddress|The IP to connect to|
 |uint32_t port|The port to connect through as a 32 bit unsigned integer|
 |int dataLength|The length of the packets send between server and client in bytes|
 
@@ -476,7 +514,7 @@ Example:
 
 int main()
 {
-	ecCreateClient(INADDR_LOOPBACK, 5000, 64);
+	ecCreateClient("127.0.0.1", 5000, 64);
 		
 	if(!ecConnectClient())
 		printf("Failed to connect!\n");
@@ -500,7 +538,7 @@ Example:
 
 int main()
 {
-	ecCreateClient(INADDR_LOOPBACK, 5000, 64);
+	ecCreateClient("127.0.0.1", 5000, 64);
 		
 	if(ecConnectClient())
 		ecDisconnect();
@@ -525,7 +563,7 @@ Example:
 
 int main()
 {	
-	ecCreateClient(INADDR_LOOPBACK, 5000, 64);
+	ecCreateClient("127.0.0.1", 5000, 64);
 	
 	ecClientUpdate(update);
 	
@@ -566,7 +604,7 @@ void update() {}
 
 int main()
 {	
-	ecCreateClient(INADDR_LOOPBACK, 5000, 64);
+	ecCreateClient("127.0.0.1", 5000, 64);
 	
 	ecClientClosedCallback(closed);
 	
@@ -599,7 +637,7 @@ void receive(void* data)
 
 int main()
 {	
-	ecCreateClient(INADDR_LOOPBACK, 5000, 64);
+	ecCreateClient("127.0.0.1", 5000, 64);
 	
 	ecClientDataCallback(receive);
 	
@@ -616,5 +654,4 @@ int main()
 ## Known Issues
 
 - poll.h is slow when managing large amounts of fds
-- EasyClient can only use IPv4
 - Only TCP support, UDP still has to be implemented

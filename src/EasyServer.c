@@ -29,7 +29,7 @@ int ecdel_pfd(struct PFDList* list, int index)
 	return 1;
 }
 
-int ecCreateServer(uint32_t port, int maxClients, int dataLength)
+int ecCreateServer(char* openaddress, uint32_t port, int maxClients, int dataLength)
 {
 	int rv;
 	
@@ -43,7 +43,7 @@ int ecCreateServer(uint32_t port, int maxClients, int dataLength)
 	char str[10];
 	sprintf(str, "%ld", (long)port);
 	
-	if((rv = getaddrinfo(NULL, str, &hints, &ai)) != 0)
+	if((rv = getaddrinfo(openaddress, str, &hints, &ai)) != 0)
 	{
 		AppendToLog(ERR_SERVER_SOCK);
 		return 0;
@@ -134,7 +134,7 @@ int ecServerPollEvents(void)
 
 			ecadd_pfd(&server.list, server.newfd);
 			if(server.AcceptedClientCallback != 0)
-				server.AcceptedClientCallback(server.list.length-1);
+				server.AcceptedClientCallback(server.list.length-2);
 
 			continue;
 		}

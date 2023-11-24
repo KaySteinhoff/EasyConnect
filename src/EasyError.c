@@ -9,10 +9,12 @@ char *EasyConnectErrorMessages[8] =
 	"00005: Failed to find open client socket\n",
 	"00006: Error polling events\n",
 	"00007: Error sending package\n"
-	"00008: Error calling Update callback. Please assign a function pointer\n"
+	"00008: Error connecting to server\n"
+	"00009: Server unavailable(IP not found)\n"
 };
 
 struct ErrorLog EasyConnectErrorLog;
+void (*EasyErrorCallback)(char*);
 
 int AppendToLog(int errorCode)
 {
@@ -31,6 +33,9 @@ int AppendToLog(int errorCode)
 	memcpy(EasyConnectErrorLog.log+EasyConnectErrorLog.length, EasyConnectErrorMessages[errorCode], length);
 	EasyConnectErrorLog.length += length;
 
+	if(EasyErrorCallback != 0)
+		EasyErrorCallback(EasyConnectErrorMessages[errorCode]);
+
 	return 1;
 }
 
@@ -44,4 +49,9 @@ char* GetError(void)
 	result[EasyConnectErrorLog.length] = '\0';
 	
 	return result;
+}
+
+void SetErrorCallback(void (*func)(char*))
+{
+	EasyErrorCallback = func;
 }

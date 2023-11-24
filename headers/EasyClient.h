@@ -16,7 +16,7 @@ struct EasyClient
 	void (*DataReceivedCallback)(void* data);
 };
 
-int ecCreateClient(uint32_t hostaddress, uint32_t port, int dataLength);
+int ecCreateClient(char* hostaddress, uint32_t port, int dataLength);
 void ecDisconnect(void);
 int ecClientPollEvents(void);
 int ecConnect(void);

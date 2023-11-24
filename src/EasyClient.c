@@ -2,19 +2,44 @@
 
 struct EasyClient client;
 
-int ecCreateClient(uint32_t hostaddress, uint32_t port, int dataLength)
+int ecCreateClient(char* hostaddress, uint32_t port, int dataLength)
 {	
-	/*char portStr[10], addrStr[10];
+	char portStr[10];
 	sprintf(portStr, "%d", port);
-	sprintf(addrStr, "%d", hostaddress);*/
 	
-	client.sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	
-	if(client.sockfd == -1)
+	struct addrinfo hints, *servinfo, *p;
+	int rv;
+
+	memset(&hints, 0, sizeof(hints));;
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if((rv = getaddrinfo(hostaddress, portStr, &hints, &servinfo)) != 0)
 	{
-		AppendToLog(ERR_CLIENT_SOCK);
+		AppendToLog(ERR_NO_SERVER);
 		return 0;
 	}
+
+	for(p = servinfo; p != NULL; p = p->ai_next) {
+      if((client.sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+         AppendToLog(ERR_CLIENT_SOCK);
+      	continue;
+      }
+	 		
+      if(connect(client.sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+         close(client.sockfd);
+   		AppendToLog(ERR_CONNECT);
+      	continue;
+      }
+
+		break;
+   }
+
+	 
+	if(p == NULL)
+		return 0;
+
+   freeaddrinfo(servinfo);
 	
 	client.poll.fd = client.sockfd;
 	client.poll.events = POLLIN;
@@ -23,10 +48,6 @@ int ecCreateClient(uint32_t hostaddress, uint32_t port, int dataLength)
 	client.data = malloc(dataLength);
 	
 	client.running = 1;
-	
-	client.host_addr.sin_family = AF_INET;
-	client.host_addr.sin_addr.s_addr = htonl(hostaddress);
-	client.host_addr.sin_port = htons(port);
 
 	return 1;
 }
@@ -67,14 +88,6 @@ int ecClientPollEvents(void)
 	if(client.DataReceivedCallback != 0)
 		client.DataReceivedCallback(client.data);
 	
-	return 1;
-}
-
-int ecConnect(void)
-{
-	if(connect(client.sockfd, (struct sockaddr*)&client.host_addr, sizeof(client.host_addr))<0)
-		return 0;
-
 	return 1;
 }
 

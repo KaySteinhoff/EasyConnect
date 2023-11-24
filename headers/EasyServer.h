@@ -29,7 +29,7 @@ struct EasyServer
 
 int ecadd_pfd(struct PFDList* list, int fd);
 int ecdel_pfd(struct PFDList* list, int index);
-int ecCreateServer(uint32_t port, int maxClients, int dataLength);
+int ecCreateServer(char* openaddress, uint32_t port, int maxClients, int dataLength);
 void ecCloseServer(void);
 int ecServerPollEvents(void);
 void ecServerCloseCallback(void (*func)(int));
