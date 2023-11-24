@@ -93,8 +93,16 @@ int ecClientPollEvents(void)
 
 int ecSend(void* data)
 {
-	if(send(client.sockfd, data, client.dataLength, 0) == -1)
+	int nbytes = send(client.sockfd, data, client.dataLength, 0);
+	
+	if(nbytes < client.dataLength)
 	{
+		if(nbytes == -1)
+		{
+			AppendToLog(ERR_CANT_SEND);
+			return 0;
+		}
+		
 		AppendToLog(ERR_PACKAGE_SEND);
 		return 0;
 	}

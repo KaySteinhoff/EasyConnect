@@ -1,9 +1,9 @@
 #include "../headers/EasyConnect.h"
 
-char *EasyConnectErrorMessages[8] = 
+char *EasyConnectErrorMessages[] = 
 {
 	"00001: Failed to create client socket\n",
-	"00002: Faulty data received\n",
+	"00002: Faulty data received(return value -1)\n",
 	"00003: Failed to create server socket\n",
 	"00004: Failed to listen to open client sockets\n",
 	"00005: Failed to find open client socket\n",
@@ -11,6 +11,7 @@ char *EasyConnectErrorMessages[8] =
 	"00007: Error sending package\n"
 	"00008: Error connecting to server\n"
 	"00009: Server unavailable(IP not found)\n"
+	"00010: Failed to send package(return value -1)\n"
 };
 
 struct ErrorLog EasyConnectErrorLog;

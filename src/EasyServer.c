@@ -194,8 +194,16 @@ int ecUnicast(int index, void* data)
 	if(index < 0 || index >= server.list.length-1)
 		return 0;
 
-	if(send(server.list.pfds[index+1].fd, data, server.dataLength, 0) == -1)
+	int nbytes = send(server.list.pfds[index+1].fd, data, server.dataLength, 0);
+
+	if(nbytes < server.dataLength)
 	{
+		if(nbytes == -1)
+		{
+			AppendToLog(ERR_CANT_SEND);
+			return 0;
+		}
+	
 		AppendToLog(ERR_PACKAGE_SEND);
 		return 0;
 	}

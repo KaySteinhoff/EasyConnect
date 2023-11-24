@@ -2,6 +2,12 @@
 
 EasyConnect was made with the intention of making networking in C easier.
 
+
+When using gcc the -I and -L tags are needed.
+```
+gcc file.c -I headers -L bin/lib -lEasyConnect -o program
+```
+
 ### Table of contents
 
 - EasyConnect callbacks

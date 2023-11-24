@@ -17,6 +17,7 @@ struct ErrorLog
 #define ERR_PACKAGE_SEND 6
 #define ERR_CONNECT 7
 #define ERR_NO_SERVER 8
+#define ERR_CANT_SEND 9
 
 int AppendToLog(int errorCode);
 char* GetError(void);
