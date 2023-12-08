@@ -6,7 +6,8 @@ struct EasyClient
 	void* data;
 	int dataLength;
 	int sockfd;
-	struct sockaddr_in host_addr;
+	int socketType;
+	struct sockaddr host_addr;
 	
 	int running;
 	
@@ -16,8 +17,8 @@ struct EasyClient
 	void (*DataReceivedCallback)(void* data);
 };
 
-int ecCreateClient(char* hostaddress, uint32_t port, int dataLength);
-void ecDisconnect(void);
+int ecCreateClient(char* hostaddress, uint32_t port, int socketType, int dataLength);
+int ecDisconnect(void);
 int ecClientPollEvents(void);
 int ecConnect(void);
 int ecSend(void* data);

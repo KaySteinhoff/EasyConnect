@@ -2,7 +2,7 @@
 
 struct EasyClient client;
 
-int ecCreateClient(char* hostaddress, uint32_t port, int dataLength)
+int ecCreateClient(char* hostaddress, uint32_t port, int socketType, int dataLength)
 {	
 	char portStr[10];
 	sprintf(portStr, "%d", port);
@@ -12,7 +12,7 @@ int ecCreateClient(char* hostaddress, uint32_t port, int dataLength)
 
 	memset(&hints, 0, sizeof(hints));;
 	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_socktype = socketType;
 
 	if((rv = getaddrinfo(hostaddress, portStr, &hints, &servinfo)) != 0)
 	{
@@ -25,7 +25,14 @@ int ecCreateClient(char* hostaddress, uint32_t port, int dataLength)
          AppendToLog(ERR_CLIENT_SOCK);
       	continue;
       }
-	 		
+		
+		if(socketType == UDP)
+		{
+			struct timeval recv_timeout;
+			recv_timeout.tv_usec = 10;
+			setsockopt(client.sockfd, SOL_SOCKET, SO_RCVTIMEO, &recv_timeout, sizeof(recv_timeout));
+		}
+		
       if(connect(client.sockfd, p->ai_addr, p->ai_addrlen) == -1) {
          close(client.sockfd);
    		AppendToLog(ERR_CONNECT);
@@ -43,8 +50,11 @@ int ecCreateClient(char* hostaddress, uint32_t port, int dataLength)
 	
 	client.poll.fd = client.sockfd;
 	client.poll.events = POLLIN;
+
+	client.host_addr = *p->ai_addr;
 	
 	client.dataLength = dataLength;
+	client.socketType = socketType;
 	client.data = malloc(dataLength);
 	
 	client.running = 1;
@@ -52,12 +62,46 @@ int ecCreateClient(char* hostaddress, uint32_t port, int dataLength)
 	return 1;
 }
 
-void ecDisconnect(void)
+int ecDisconnect(void)
 {
-	close(client.sockfd);
+	if(client.socketType == TCP)
+	{
+		close(client.sockfd);
+		return 1;
+	}
+	else if(client.socketType != UDP)
+		return 1;
+	else
+		AppendToLog(ERR_NO_PROTOCOL);
+	
+	return 0;
 }
 
-int ecClientPollEvents(void)
+int ecClientPollUDP(void)
+{
+	socklen_t len = sizeof(client.host_addr);
+	int nbytes = recvfrom(client.sockfd, client.data, client.dataLength, 0, &client.host_addr, &len);
+
+	if(nbytes <= 0)
+	{
+		if(nbytes == 0)
+		{
+			if(client.ConnectionClosedCallback != 0)
+				client.ConnectionClosedCallback();
+			return 0;
+		}
+
+		AppendToLog(ERR_FAULTY_DATA);
+		return 0;
+	}
+
+	if(client.DataReceivedCallback != 0)
+		client.DataReceivedCallback(client.data);
+
+	return 1;
+}
+
+int ecClientPollTCP(void)
 {
 	int num_polls = poll(&client.poll, 1, 0);
 		
@@ -71,7 +115,7 @@ int ecClientPollEvents(void)
 		return 1;
 
 	int nbytes = recv(client.sockfd, client.data, client.dataLength, 0);
-
+	
 	if(nbytes <= 0)
 	{
 		if(nbytes == 0)
@@ -89,6 +133,19 @@ int ecClientPollEvents(void)
 		client.DataReceivedCallback(client.data);
 	
 	return 1;
+}
+
+int ecClientPollEvents(void)
+{
+	if(client.socketType == TCP)
+		return ecClientPollTCP();
+	else if(client.socketType == UDP)
+		return ecClientPollUDP();
+	else
+	{
+		AppendToLog(ERR_NO_PROTOCOL);
+		return 0;
+	}
 }
 
 int ecSend(void* data)
@@ -110,7 +167,7 @@ int ecSend(void* data)
 	return 1;
 }
 
-void ecClientClosedCallback(void (*func)())
+void ecClientClosedCallback(void (*func)(void))
 {
 	client.ConnectionClosedCallback = func;
 }

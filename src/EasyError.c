@@ -11,7 +11,8 @@ char *EasyConnectErrorMessages[] =
 	"00007: Error sending package\n"
 	"00008: Error connecting to server\n"
 	"00009: Server unavailable(IP not found)\n"
-	"00010: Failed to send package(return value -1)\n"
+	"00010: Failed to send package(return value -1)\n",
+	"00011: Server protocol not found(neither TCP nor UDP selected)\n"
 };
 
 struct ErrorLog EasyConnectErrorLog;
