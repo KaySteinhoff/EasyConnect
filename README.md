@@ -154,7 +154,7 @@ typedef void(*ECCLIENTDATARECEIVEPROC)(int nsize, void *data);
 
 To set this callback you need to call ECServer_OnDataReceive():
 ```c
-ECCLIENTDATARECEIVEPROC oldHandler = ECServer_OnDataReceive(newHandler);
+ECCLIENTDATARECEIVEPROC oldHandler = ECClient_OnDataReceive(newHandler);
 ```
 
 ### OnConnectionTerminated
@@ -166,6 +166,6 @@ typedef void(*ECCLIENTCONNECTIONTERMINATEDPROC)(void);
 
 To set this callback you need to call ECServer_OnConnectionTerminated():
 ```c
-ECCLIENTCONNECTIONTERMINATEDPROC oldHandler = ECServer_OnConnectionTerminated(newHandler);
+ECCLIENTCONNECTIONTERMINATEDPROC oldHandler = ECClient_OnConnectionTerminated(newHandler);
 ```
 
