@@ -1,33 +1,33 @@
 #include <ec.h>
-#include <unistd.h>
+
 #include <stdlib.h>
 #include <stdio.h>
-#include <sys/fcntl.h>
-#include <pthread.h>
+#ifdef __unix__
+	#include <unistd.h>
+	#include <sys/fcntl.h>
+	#include <pthread.h>
+#elif defined(__WIN32)
+	#include <windows.h>
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
+	#include <process.h>
+	#define close closesocket
+	#define pthread_t HANDLE
+	#define pthread_create(thr, attr, func, arg) *(thr) = (HANDLE)_beginthreadex(NULL, 0, (_beginthreadex_proc_type)(func), arg, 0, NULL)
+	#define pthread_detach(thr) CloseHandle(thr)
+	#define pthread_exit(code) _endthreadex(code)
+#endif
 
-#define ERR_SUCCESS 0
-#define ERR_UNINITIALIZED 1
-#define ERR_NULL_REFERENCE 2
-#define ERR_INVALID_ARGUMENT 3
-#define ERR_INVALID_OPERATION 4
-#define ERR_NETWORK 5
-#define ERR_INDEX_OUT_OF_RANGE 6
-
-ECSERVERDATARECEIVEPROC serverDataProc = NULL;
-ECSERVERCONNECTIONCREATEPROC serverConnCreateProc = NULL;
-ECSERVERCONNECTIONTERMINATEDPROC serverConnTermProc = NULL;
+static ECSERVERDATARECEIVEPROC serverDataProc = NULL;
+static ECSERVERCONNECTIONCREATEPROC serverConnCreateProc = NULL;
+static ECSERVERCONNECTIONTERMINATEDPROC serverConnTermProc = NULL;
 
 extern void zero(void *ptr, unsigned int size);
 extern void SetFdToNonBlocking(int fd);
 extern unsigned int ipToStr(in_addr_t ip, char *str);
 extern unsigned int strToIP(in_addr_t *addr, char *ip);
 
-extern unsigned int ecInitialized;
-
-extern unsigned int UDP_ReceiveBufferLength;
-extern void *UDP_ReceiveBuffer;
-
-void ServerTCP_Process(ECServer *server)
+static void ServerTCP_Process(ECServer *server)
 {
 	SetFdToNonBlocking(server->serverfd);
 
@@ -86,7 +86,7 @@ void ServerTCP_Process(ECServer *server)
 	}
 }
 
-void ServerUDP_Process(ECServer *server)
+static void ServerUDP_Process(ECServer *server, ecConfig *config)
 {
 	struct sockaddr_in client_addr = { 0 };
 	socklen_t clientlen = sizeof(client_addr);
@@ -100,15 +100,15 @@ void ServerUDP_Process(ECServer *server)
 	while(1)
 	{
 		int pkgLen = -1;
-		if((pkgLen = recvfrom(server->serverfd, UDP_ReceiveBuffer, UDP_ReceiveBufferLength, 0, (struct sockaddr*)&client.inet_addr, &clientlen)) < 0)
+		if((pkgLen = recvfrom(server->serverfd, config->receiveBuffer, config->receiveBufferSize, 0, (struct sockaddr*)&client.inet_addr, &clientlen)) < 0)
 			continue;
 
 		if(serverDataProc)
 		{
 			ipToStr(ntohl(client.inet_addr.sin_addr.s_addr), ip);
-			serverDataProc(&client, ip, ntohs(client.inet_addr.sin_port), pkgLen, UDP_ReceiveBuffer);
+			serverDataProc(&client, ip, ntohs(client.inet_addr.sin_port), pkgLen, config->receiveBuffer);
 		}
-		zero(UDP_ReceiveBuffer, pkgLen);
+		zero(config->receiveBuffer, pkgLen);
 	}
 }
 
@@ -126,21 +126,21 @@ void* serverProcess(void *ptr)
 	pthread_exit(0);
 }
 
-unsigned int ECServer_Start(ECServer *server, ECenum connectionType, int port, int maxClients)
+unsigned int ECServer_Start(ECServer *server, ecConfig *config, ECenum connectionType, int port, int maxClients)
 {
-	if(!server)
+	if(!server || !config)
 		return ERR_NULL_REFERENCE;
 
-	if(!ecInitialized)
-		return ERR_UNINITIALIZED;
+	if((config->ipv != 4 && config->ipv != 6) || maxClients <= 0 || port <= 0)
+		return ERR_INVALID_ARGUMENT;
 
 	zero(&server->server_addr, sizeof(server->server_addr));
-	server->server_addr.sin_family = AF_INET;
+	server->server_addr.sin_family = config->ipv == 4 ? AF_INET : AF_INET6;
 	server->server_addr.sin_addr.s_addr = INADDR_ANY;
 	server->server_addr.sin_port = htons(port);
 	server->maxClientCount = maxClients;
 
-	if(bind((server->serverfd = socket(AF_INET, connectionType, 0)), (struct sockaddr*)&server->server_addr, sizeof(server->server_addr)) < 0)
+	if(bind((server->serverfd = socket(server->server_addr.sin_family, connectionType, 0)), (struct sockaddr*)&server->server_addr, sizeof(server->server_addr)) < 0)
 		return ERR_NETWORK;
 
 	pthread_t thread;
@@ -156,9 +156,6 @@ unsigned int ECServer_Shutdown(ECServer *server)
 	if(!server)
 		return ERR_NULL_REFERENCE;
 
-	if(!ecInitialized)
-		return ERR_UNINITIALIZED;
-
 	if(server->clients)
 	{
 		int count = server->clientCount;
@@ -172,24 +169,21 @@ unsigned int ECServer_Shutdown(ECServer *server)
 	return ERR_SUCCESS;
 }
 
-void CloseSocketByIdx(ECServer *server, int idx)
+static void CloseSocketByIdx(ECServer *server, int idx)
 {
 	close(server->clients[idx].clientfd);
 	server->clients[idx] = server->clients[--server->clientCount];
 }
 
-void SendToSocketByIdx(ECServer *server, int idx, int nsize, void *data)
+static void SendToSocketByIdx(ECServer *server, int idx, int nsize, void *data)
 {
-	write(server->clients[idx].clientfd, &nsize, 4);
 	write(server->clients[idx].clientfd, data, nsize);
 }
 
-unsigned int ECServer_Send(ECServer *server, ECClient *client, char *ip, int fd, int nsize, void *data)
+unsigned int ECServer_Send(ECServer *server, ecConfig *config, ECClient *client, char *ip, int fd, int nsize, void *data)
 {
-	if(!server)
+	if(!server || !config || !data || !ip)
 		return ERR_NULL_REFERENCE;
-	if(!ecInitialized)
-		return ERR_UNINITIALIZED;
 
 	int length = sizeof(int), type = 0;
 	getsockopt(server->serverfd, SOL_SOCKET, SO_TYPE, &type, (socklen_t*)&length);
@@ -254,8 +248,6 @@ unsigned int ECServer_Kick(ECServer *server, ECClient *client, char *ip, int fd)
 {
 	if(!server || !server->clients)
 		return ERR_NULL_REFERENCE;
-	if(!ecInitialized)
-		return ERR_UNINITIALIZED;
 
 	if(fd >= 0)
 	{

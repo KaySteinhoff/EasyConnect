@@ -1,55 +1,56 @@
 #include <ec.h>
-#include <unistd.h>
+
 #include <stdlib.h>
 #include <stdio.h>
-#include <sys/fcntl.h>
-#include <pthread.h>
+#ifdef __unix__
+	#include <unistd.h>
+	#include <sys/fcntl.h>
+	#include <pthread.h>
+#elif defined(__WIN32)
+	#include <windows.h>
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
+	#include <process.h>
+	#define close closesocket
+	#define pthread_t HANDLE
+	#define pthread_create(thr, attr, func, arg) *(thr) = (HANDLE)_beginthreadex(NULL, 0, (_beginthreadex_proc_type)(func), arg, 0, NULL)
+	#define pthread_detach(thr) CloseHandle(thr)
+	#define pthread_exit(code) _endthreadex(code)
+#endif
 
-#define ERR_SUCCESS 0
-#define ERR_UNINITIALIZED 1
-#define ERR_NULL_REFERENCE 2
-#define ERR_INVALID_ARGUMENT 3
-#define ERR_INVALID_OPERATION 4
-#define ERR_NETWORK 5
-#define ERR_INDEX_OUT_OF_RANGE 6
 
-ECCLIENTDATARECEIVEPROC clientDataProc = NULL;
-ECCLIENTCONNECTIONTERMINATEDPROC clientConnTermProc = NULL;
+static ECCLIENTDATARECEIVEPROC clientDataProc = NULL;
+static ECCLIENTCONNECTIONTERMINATEDPROC clientConnTermProc = NULL;
 
 extern void zero(void *ptr, unsigned int size);
 extern void SetFdToNonBlocking(int fd);
 extern unsigned int ipToStr(in_addr_t ip, char *str);
 extern unsigned int strToIP(in_addr_t *addr, char *ip);
 
-extern unsigned int ecInitialized;
-
-extern unsigned int UDP_ReceiveBufferLength;
-extern void *UDP_ReceiveBuffer;
-
-void ClientTCP_Process(ECClient *client)
+static void ClientTCP_Process(ECClient *client, ecConfig *config)
 {
 	while(1)
 	{
 		int pkgLen = -1;
-		if((pkgLen = recvfrom(client->clientfd, UDP_ReceiveBuffer, UDP_ReceiveBufferLength, 0, NULL, 0)) < 0)
+		if((pkgLen = recvfrom(client->clientfd, config->receiveBuffer, config->receiveBufferSize, 0, NULL, 0)) < 0)
 			continue;
 		// Read data and, if provided, pass to the given receive callback
 		if(clientDataProc)
-			clientDataProc(pkgLen, UDP_ReceiveBuffer);
+			clientDataProc(pkgLen, config->receiveBuffer);
 	}
 }
 
-void ClientUDP_Process(ECClient *client)
+void ClientUDP_Process(ECClient *client, ecConfig *config)
 {
 	while(1)
 	{
 		int pkgLen = -1;
-		if((pkgLen = recvfrom(client->clientfd, UDP_ReceiveBuffer, UDP_ReceiveBufferLength, 0, NULL, 0)) < 0)
+		if((pkgLen = recvfrom(client->clientfd, config->receiveBuffer, config->receiveBufferSize, 0, NULL, 0)) < 0)
 			continue;
 
 		// Read data and, if provided, pass to the given receive callback
 		if(clientDataProc)
-			clientDataProc(pkgLen, UDP_ReceiveBuffer);
+			clientDataProc(pkgLen, config->receiveBuffer);
 	}
 }
 
@@ -67,13 +68,10 @@ void* clientProcess(void *ptr)
 	pthread_exit(0);
 }
 
-unsigned int ECClient_Connect(ECClient *client, ECenum connectionType, char *ip, int port)
+unsigned int ECClient_Connect(ECClient *client, ecConfig *config, ECenum connectionType, char *ip, int port)
 {
-	if(!client)
+	if(!client || !config || !ip)
 		return ERR_NULL_REFERENCE;
-
-	if(!ecInitialized)
-		return ERR_UNINITIALIZED;
 
 	unsigned int err = 0;
 	in_addr_t addr = 0;
@@ -103,8 +101,6 @@ unsigned int ECClient_Send(ECClient *client, int nsize, void *data)
 {
 	if(!client || !data)
 		return ERR_NULL_REFERENCE;
-	if(!ecInitialized)
-		return ERR_UNINITIALIZED;
 
 	int length = sizeof(int), type = 0;
 	getsockopt(client->clientfd, SOL_SOCKET, SO_TYPE, &type, (socklen_t*)&length);
@@ -123,9 +119,6 @@ unsigned int ECClient_Disconnect(ECClient *client)
 {
 	if(!client)
 		return ERR_NULL_REFERENCE;
-
-	if(!ecInitialized)
-		return ERR_UNINITIALIZED;
 
 	close(client->clientfd);
 	return ERR_SUCCESS;
