@@ -6,6 +6,7 @@
 #include <ecClient.h>
 #ifdef __unix__
 	#include <netinet/in.h>
+	#include <pthread.h>
 #elif defined(__WIN32)
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
@@ -18,11 +19,14 @@ typedef struct
 	ECClient *clients;
 	struct sockaddr_in server_addr;
 	ecConfig *config;
+#ifdef __unix__
+	pthread_t processingThread;
+#endif
 }ECServer;
 
-typedef void (*ECSERVERDATARECEIVEPROC)(ECClient *client, char *ip, int port, int nsize, void *data);
-typedef void (*ECSERVERCONNECTIONCREATEPROC)(char *ip, int port);
-typedef void (*ECSERVERCONNECTIONTERMINATEDPROC)(char *ip, int port);
+typedef void (*ECSERVERDATARECEIVEPROC)(ECServer *server, ECClient *client, char *ip, int port, int nsize, void *data);
+typedef void (*ECSERVERCONNECTIONCREATEPROC)(ECServer *server, char *ip, int port);
+typedef void (*ECSERVERCONNECTIONTERMINATEDPROC)(ECServer *server, char *ip, int port);
 
 unsigned int ECServer_Start(ECServer *server, ecConfig *config, ECenum connectionType, int port, int maxClients);
 unsigned int ECServer_Send(ECServer *server, ECClient *client, char *ip, int fd, int nsize, void *data);

@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #ifdef __unix__
 	#include <unistd.h>
 	#include <sys/fcntl.h>
@@ -18,24 +19,77 @@
 	#define pthread_exit(code) _endthreadex(code)
 #endif
 
-
 static ECCLIENTDATARECEIVEPROC clientDataProc = NULL;
 static ECCLIENTCONNECTIONTERMINATEDPROC clientConnTermProc = NULL;
 
-extern void zero(void *ptr, unsigned int size);
 extern unsigned int ipToStr(in_addr_t ip, char *str);
 extern unsigned int strToIP(in_addr_t *addr, char *ip);
+
+static void ECClientHandleDisconnect(ECClient *client)
+{
+	if(!clientConnTermProc)
+		return;
+	clientConnTermProc(client);
+}
+
+static void ECClientReadData(ECClient *client, unsigned char *initial, unsigned char **data, int *pkgLen)
+{
+	*data = malloc(1024);
+	if(!*data)
+		return;
+
+	memcpy(*data, initial, *pkgLen);
+	int pkgCapacity = 1024, prevBytesRead = 0;
+	while((*pkgLen = read(client->clientfd, *data + (pkgCapacity << 1), (pkgCapacity << 1))) > 0)
+	{
+		unsigned char *tmp = realloc(*data, pkgCapacity << 1);
+		if(!tmp)
+		{
+			free(*data);
+			*data = NULL;
+			return;
+		}
+
+		*data = tmp;
+		pkgCapacity <<= 1;
+		prevBytesRead = *pkgLen;
+	}
+	*pkgLen = (pkgCapacity << 1) + prevBytesRead;
+}
+
+static void ECClientRelayData(ECClient *client, int pkgLen, unsigned char *data)
+{
+	if(!clientDataProc)
+		return;
+
+	clientDataProc(client, pkgLen, data);
+}
 
 static void ClientTCP_Process(ECClient *client)
 {
 	while(1)
 	{
 		int pkgLen = -1;
-		if((pkgLen = recvfrom(client->clientfd, client->config->receiveBuffer, client->config->receiveBufferSize, 0, NULL, 0)) < 0)
+		unsigned char dummy[512] = { 0 };
+		if((pkgLen = read(client->clientfd, dummy, 512)) < 0)
 			continue;
-		// Read data and, if provided, pass to the given receive callback
-		if(clientDataProc)
-			clientDataProc(pkgLen, client->config->receiveBuffer);
+
+		switch(pkgLen)
+		{
+			case 0:
+				ECClientHandleDisconnect(client);
+				break;
+			case 512:
+				unsigned char *data = NULL;
+				ECClientReadData(client, dummy, &data, &pkgLen);
+				ECClientRelayData(client, pkgLen, dummy);
+				if(data)
+					free(data);
+				break;
+			default:
+				ECClientRelayData(client, pkgLen, dummy);
+				break;
+		}
 	}
 }
 
@@ -49,7 +103,7 @@ static void ClientUDP_Process(ECClient *client)
 
 		// Read data and, if provided, pass to the given receive callback
 		if(clientDataProc)
-			clientDataProc(pkgLen, client->config->receiveBuffer);
+			clientDataProc(client, pkgLen, client->config->receiveBuffer);
 	}
 }
 
@@ -77,7 +131,7 @@ unsigned int ECClient_Connect(ECClient *client, ecConfig *config, ECenum connect
 	if((err = strToIP(&addr, ip)))
 		return err;
 
-	zero(&client->inet_addr, sizeof(client->inet_addr));
+	memset(&client->inet_addr, 0, sizeof(client->inet_addr));
 	client->inet_addr.sin_family = AF_INET;
 	client->inet_addr.sin_addr.s_addr = htonl(addr);
 	client->inet_addr.sin_port = htons(port);
@@ -90,9 +144,8 @@ unsigned int ECClient_Connect(ECClient *client, ecConfig *config, ECenum connect
 
 	// Start receiving thread
 	client->config = config;
-	pthread_t thread;
-	pthread_create(&thread, 0, clientProcess, client);
-	pthread_detach(thread);
+	pthread_create(&client->processingThread, 0, clientProcess, client);
+	pthread_detach(client->processingThread);
 
 	return EC_ERR_SUCCESS;
 }
@@ -109,6 +162,7 @@ unsigned int ECClient_Send(ECClient *client, int nsize, void *data)
 	else if(type == UDP && sendto(client->clientfd, data, nsize, 0, (const struct sockaddr*)&client->inet_addr, sizeof(client->inet_addr)) != nsize)
 		return EC_ERR_NETWORK;
 
+	pthread_cancel(client->processingThread);
 	return EC_ERR_SUCCESS;
 }
 

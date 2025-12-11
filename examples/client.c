@@ -22,7 +22,7 @@ void die(unsigned int code)
 	exit(code);
 }
 
-void dataReceived(int nsize, void *data)
+void dataReceived(ECClient *client, int nsize, void *data)
 {
 	printf("Received message from server:\n\"%.*s\"\n", nsize, data);
 	received = 1;

@@ -2,8 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-ECServer server = { 0 };
-
 void logErr(unsigned int code)
 {
 	unsigned int err = 0;
@@ -22,17 +20,17 @@ void die(unsigned int code)
 	exit(code);
 }
 
-void dataReceived(ECClient *client, char *ip, int port, int nsize, void *data)
+void dataReceived(ECServer *server, ECClient *client, char *ip, int port, int nsize, void *data)
 {
 	printf("Receieved message from client %s:%d\n\"%.*s\"\n", ip, port, nsize, data);
 }
 
-void connectionCreated(char *ip, int port)
+void connectionCreated(ECServer *server, char *ip, int port)
 {
 	printf("Incoming connection from %s:%d\n", ip, port);
 
 	unsigned int err = 0;
-	if((err = ECServer_Send(&server, NULL, ip, -1, 5, "Pong")))
+	if((err = ECServer_Send(server, NULL, ip, -1, 5, "Pong")))
 		logErr(err);
 }
 
@@ -42,6 +40,8 @@ int main(int argc, char **argv)
 	unsigned int err = 0;
 	if((err = ECParseArgs(&config, argc, argv)))
 		die(err);
+
+	ECServer server = { 0 };
 
 	if((err = ECServer_Start(&server, &config, TCP, 16380, 5)))
 		die(err);

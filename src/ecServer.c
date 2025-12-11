@@ -33,7 +33,7 @@ static void ECServerReadData(ECServer *server, int clientIdx, unsigned char *ini
 		return;
 
 	memcpy(*data, initial, *pkgLen);
-	int pkgCapacity = 1024;
+	int pkgCapacity = 1024, prevBytesRead;
 	while((*pkgLen = read(server->clients[clientIdx].clientfd, *data + (pkgCapacity << 1), (pkgCapacity << 1))) > 0)
 	{
 		unsigned char *tmp = realloc(*data, pkgCapacity << 1);
@@ -46,9 +46,10 @@ static void ECServerReadData(ECServer *server, int clientIdx, unsigned char *ini
 
 		*data = tmp;
 		pkgCapacity <<= 1;
+		prevBytesRead = *pkgLen;
 	}
 
-	*pkgLen = (pkgCapacity << 1) + *pkgLen;
+	*pkgLen = (pkgCapacity << 1) + prevBytesRead;
 }
 
 static void ECServerRelayData(ECServer *server, int clientIdx, void *data, int pkgLen)
@@ -58,7 +59,7 @@ static void ECServerRelayData(ECServer *server, int clientIdx, void *data, int p
 
 	char ip[16] = { 0 };
 	ipToStr(ntohl(server->clients[clientIdx].inet_addr.sin_addr.s_addr), ip);
-	serverDataProc(&server->clients[clientIdx], ip, ntohs(server->clients[clientIdx].inet_addr.sin_port), pkgLen, data);
+	serverDataProc(server, &server->clients[clientIdx], ip, ntohs(server->clients[clientIdx].inet_addr.sin_port), pkgLen, data);
 }
 
 static void ECServerHandleDisconnect(ECServer *server, int clientIdx)
@@ -72,7 +73,7 @@ static void ECServerHandleDisconnect(ECServer *server, int clientIdx)
 
 	char ip[16] = { 0 };
 	ipToStr(ntohl(server->clients[clientIdx].inet_addr.sin_addr.s_addr), ip);
-	serverConnTermProc(ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
+	serverConnTermProc(server, ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
 }
 
 static void ECServerHandlePackage(ECServer *server, int clientIdx)
@@ -108,7 +109,7 @@ static void ECServerCreateConnection(ECServer *server, int clientIdx)
 
 	char ip[16] = { 0 };
 	ipToStr(ntohl(server->clients[clientIdx].inet_addr.sin_addr.s_addr), ip);
-	serverConnCreateProc(ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
+	serverConnCreateProc(server, ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
 }
 
 static void ServerTCP_Process(ECServer *server)
@@ -160,7 +161,7 @@ static void ServerUDP_Process(ECServer *server)
 		if(serverDataProc)
 		{
 			ipToStr(ntohl(client.inet_addr.sin_addr.s_addr), ip);
-			serverDataProc(&client, ip, ntohs(client.inet_addr.sin_port), pkgLen, server->config->receiveBuffer);
+			serverDataProc(server, &client, ip, ntohs(client.inet_addr.sin_port), pkgLen, server->config->receiveBuffer);
 		}
 		memset(server->config->receiveBuffer, 0, pkgLen);
 	}
@@ -199,9 +200,8 @@ unsigned int ECServer_Start(ECServer *server, ecConfig *config, ECenum connectio
 
 	// Start connecting and receiving thread
 	server->config = config;
-	pthread_t thread;
-	pthread_create(&thread, 0, serverProcess, server);
-	pthread_detach(thread);
+	pthread_create(&server->processingThread, 0, serverProcess, server);
+	pthread_detach(server->processingThread);
 
 	return EC_ERR_SUCCESS;
 }
@@ -221,6 +221,7 @@ unsigned int ECServer_Shutdown(ECServer *server)
 	}
 
 	close(server->serverfd);
+	pthread_cancel(server->processingThread);
 	return EC_ERR_SUCCESS;
 }
 

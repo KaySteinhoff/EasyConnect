@@ -1,6 +1,8 @@
 # Only specified for unix as Windows isn't supported as of the time of uploading
 *.sh
+*.so
 *.out
 *.bat
 *.dll
+*.exe
 *.swp

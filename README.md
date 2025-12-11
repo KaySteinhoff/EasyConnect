@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 	unsigned int err = 0;
 
 	ecConfig config = { 0 };
-	if((err = ECParseArgs(argc, argv, &config)))
+	if((err = ECParseArgs(&config, argc, argv)))
 		die(err);
 
 	// ...
@@ -93,7 +93,7 @@ int main(int argc, char **argv)
 	unsigned int err = 0;
 
 	ecConfig config = { 0 };
-	if((err = ECParseArgs(argc, argv)))
+	if((err = ECParseArgs(&config, argc, argv)))
 		die(err);
 
 	ECServer server = { 0 };
