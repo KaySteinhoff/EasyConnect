@@ -10,7 +10,7 @@
 typedef enum
 {
 	TCP = SOCK_STREAM,
-	UDP = SOCK_DGRAM
+	UDP = SOCK_DGRAM,
 }ECenum;
 
 #endif

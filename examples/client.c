@@ -1,51 +1,56 @@
-#include <stdio.h>
-#include <unistd.h>
 #include <ec.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-void DataReceive(int nsize, void *data)
+unsigned int received = 0;
+
+void logErr(unsigned int code)
 {
-	for(int i = 0; i < nsize; ++i)
-		printf("%c", ((char*)data)[i]);
-	puts("");
+	unsigned int err = 0;
+	const char *str = NULL;
+	if((err = ECErrorCodeToString(code, &str)))
+	{
+		ECErrorCodeToString(err, &str);
+		code = err;
+	}
+	printf("%s(Code: %d)\n", str, code);
 }
 
-void ServerDisconnected(void)
+void die(unsigned int code)
 {
-	puts("Connection was terminated by the server side.");
+	logErr(code);
+	exit(code);
+}
+
+void dataReceived(int nsize, void *data)
+{
+	printf("Received message from server:\n\"%.*s\"\n", nsize, data);
+	received = 1;
 }
 
 int main(int argc, char **argv)
 {
-	ECClient client = { 0 };
+	ecConfig config = { 0 };
 	unsigned int err = 0;
+	if((err = ECParseArgs(&config, argc, argv)))
+		die(err);
 
-	if((err = InitEC(argc, argv)))
-	{
-		printf("%s(Code: %d)\n", ECErrorCodeToString(err), err);
-		return 1;
-	}
+	ECClient client = { 0 };
+	if((err = ECClient_Connect(&client, &config, TCP, "127.0.0.1", 16380)))
+		die(err);
 
-	ECClient_OnDataReceive(DataReceive);
-	ECClient_OnConnectionTerminated(ServerDisconnected);
+	ECClient_OnDataReceive(dataReceived);
 
-	if((err = ECClient_Connect(&client, UDP, "127.0.0.1", 16380)))
-	{
-		printf("%s(Code: %d)\n", ECErrorCodeToString(err), err);
-		return 2;
-	}
+	puts("Connected to server! Sending message...");
+	if((err = ECClient_Send(&client, 5, "Ping")))
+		die(err);
 
-	if((err = ECClient_Send(&client, 5, "Hello")))
-	{
-		printf("%s(Code: %d)\n", ECErrorCodeToString(err), err);
-		return 3;
-	}
-
-	getchar();
+	puts("Send message! Awaiting server response...");
+	while(!received) { }
+	puts("Terminating connection...");
 
 	if((err = ECClient_Disconnect(&client)))
-	{
-		printf("%s(Code: %d)\n", ECErrorCodeToString(err), err);
-		return 4;
-	}
+		die(err);
+
 	return 0;
 }

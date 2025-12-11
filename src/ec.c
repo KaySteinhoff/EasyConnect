@@ -22,30 +22,24 @@ void ipToStr(in_addr_t ip, char *str)
 unsigned int strToIP(in_addr_t *addr, char *ip)
 {
 	if(!ip || !addr)
-		return ERR_NULL_REFERENCE;
+		return EC_ERR_NULL_REFERENCE;
 	char *endp = NULL;
 	long first = strtol(ip, &endp, 10);
 	if(ip == endp || first > 255 || first < 0 || endp[0] != '.')
-		return ERR_INVALID_ARGUMENT;
+		return EC_ERR_INVALID_ARGUMENT;
 
 	long second = strtol(++endp, &endp, 10);
 	if(ip == endp || second > 255 || second < 0 || endp[0] != '.')
-		return ERR_INVALID_ARGUMENT;
+		return EC_ERR_INVALID_ARGUMENT;
 
 	long third = strtol(++endp, &endp, 10);
 	if(ip == endp || third > 255 || third < 0 || endp[0] != '.')
-		return ERR_INVALID_ARGUMENT;
+		return EC_ERR_INVALID_ARGUMENT;
 
 	long fourth = strtol(++endp, &endp, 10);
 	if(ip == endp || fourth > 255 || fourth < 0)
-		return ERR_INVALID_ARGUMENT;
+		return EC_ERR_INVALID_ARGUMENT;
 
 	*addr = (in_addr_t)((first<<24) | (second<<16) | (third<<8) | fourth);
-	return ERR_SUCCESS;
-}
-
-void SetFdToNonBlocking(int fd)
-{
-	int flags = fcntl(fd, F_GETFL, 0);
-	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+	return EC_ERR_SUCCESS;
 }

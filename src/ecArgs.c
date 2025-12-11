@@ -1,5 +1,6 @@
 #include <ecErrors.h>
 #include <ecArgs.h>
+#include <stdlib.h>
 
 #define IPV4_HASH_S 12355667
 #define IPV4_HASH_L 1555179381
@@ -21,6 +22,7 @@ static unsigned int hash(char *str)
 
 static int ECProcessArg(ecConfig *config, int argc, char **argv, int index, unsigned int value)
 {
+    config->ipv = 4;
     config->receiveBufferSize= 1024; // Default receive buffer size
     config->receiveBuffer = UDP_DefaultReceiveBuffer;
 
@@ -60,9 +62,9 @@ unsigned int ECParseArgs(ecConfig *config, int argc, char **argv)
     if(!config || !argv)
         return EC_ERR_NULL_REFERENCE;
 
-    if(argc <= 1)
+    if(argc < 1)
         return EC_ERR_INVALID_ARGUMENT;
-    
+
     for(int i = 0; i < argc; ++i)
     {
         unsigned int value = hash(argv[i]);

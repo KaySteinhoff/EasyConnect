@@ -23,38 +23,37 @@ static ECCLIENTDATARECEIVEPROC clientDataProc = NULL;
 static ECCLIENTCONNECTIONTERMINATEDPROC clientConnTermProc = NULL;
 
 extern void zero(void *ptr, unsigned int size);
-extern void SetFdToNonBlocking(int fd);
 extern unsigned int ipToStr(in_addr_t ip, char *str);
 extern unsigned int strToIP(in_addr_t *addr, char *ip);
 
-static void ClientTCP_Process(ECClient *client, ecConfig *config)
+static void ClientTCP_Process(ECClient *client)
 {
 	while(1)
 	{
 		int pkgLen = -1;
-		if((pkgLen = recvfrom(client->clientfd, config->receiveBuffer, config->receiveBufferSize, 0, NULL, 0)) < 0)
+		if((pkgLen = recvfrom(client->clientfd, client->config->receiveBuffer, client->config->receiveBufferSize, 0, NULL, 0)) < 0)
 			continue;
 		// Read data and, if provided, pass to the given receive callback
 		if(clientDataProc)
-			clientDataProc(pkgLen, config->receiveBuffer);
+			clientDataProc(pkgLen, client->config->receiveBuffer);
 	}
 }
 
-void ClientUDP_Process(ECClient *client, ecConfig *config)
+static void ClientUDP_Process(ECClient *client)
 {
 	while(1)
 	{
 		int pkgLen = -1;
-		if((pkgLen = recvfrom(client->clientfd, config->receiveBuffer, config->receiveBufferSize, 0, NULL, 0)) < 0)
+		if((pkgLen = recvfrom(client->clientfd, client->config->receiveBuffer, client->config->receiveBufferSize, 0, NULL, 0)) < 0)
 			continue;
 
 		// Read data and, if provided, pass to the given receive callback
 		if(clientDataProc)
-			clientDataProc(pkgLen, config->receiveBuffer);
+			clientDataProc(pkgLen, client->config->receiveBuffer);
 	}
 }
 
-void* clientProcess(void *ptr)
+static void* clientProcess(void *ptr)
 {
 	ECClient *client = ptr;
 
@@ -71,7 +70,7 @@ void* clientProcess(void *ptr)
 unsigned int ECClient_Connect(ECClient *client, ecConfig *config, ECenum connectionType, char *ip, int port)
 {
 	if(!client || !config || !ip)
-		return ERR_NULL_REFERENCE;
+		return EC_ERR_NULL_REFERENCE;
 
 	unsigned int err = 0;
 	in_addr_t addr = 0;
@@ -84,44 +83,42 @@ unsigned int ECClient_Connect(ECClient *client, ecConfig *config, ECenum connect
 	client->inet_addr.sin_port = htons(port);
 
 	if((client->clientfd = socket(AF_INET, connectionType, 0)) < 0)
-		return ERR_NETWORK;
+		return EC_ERR_NETWORK;
 
 	if(connectionType == TCP && connect(client->clientfd, (struct sockaddr*)&client->inet_addr, sizeof(client->inet_addr)) < 0)
-		return ERR_NETWORK;
+		return EC_ERR_NETWORK;
 
 	// Start receiving thread
+	client->config = config;
 	pthread_t thread;
 	pthread_create(&thread, 0, clientProcess, client);
 	pthread_detach(thread);
 
-	return ERR_SUCCESS;
+	return EC_ERR_SUCCESS;
 }
 
 unsigned int ECClient_Send(ECClient *client, int nsize, void *data)
 {
 	if(!client || !data)
-		return ERR_NULL_REFERENCE;
+		return EC_ERR_NULL_REFERENCE;
 
 	int length = sizeof(int), type = 0;
 	getsockopt(client->clientfd, SOL_SOCKET, SO_TYPE, &type, (socklen_t*)&length);
 	if(type == TCP)
-	{
-		write(client->clientfd, &nsize, 4);
 		write(client->clientfd, data, nsize);
-	}
 	else if(type == UDP && sendto(client->clientfd, data, nsize, 0, (const struct sockaddr*)&client->inet_addr, sizeof(client->inet_addr)) != nsize)
-		return ERR_NETWORK;
+		return EC_ERR_NETWORK;
 
-	return ERR_SUCCESS;
+	return EC_ERR_SUCCESS;
 }
 
 unsigned int ECClient_Disconnect(ECClient *client)
 {
 	if(!client)
-		return ERR_NULL_REFERENCE;
+		return EC_ERR_NULL_REFERENCE;
 
 	close(client->clientfd);
-	return ERR_SUCCESS;
+	return EC_ERR_SUCCESS;
 }
 
 ECCLIENTDATARECEIVEPROC ECClient_OnDataReceive(ECCLIENTDATARECEIVEPROC newHandler)

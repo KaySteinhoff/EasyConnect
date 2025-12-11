@@ -1,50 +1,57 @@
-#include <unistd.h>
-#include <stdio.h>
 #include <ec.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 ECServer server = { 0 };
 
-void ClientConnected(char *ip, int port)
+void logErr(unsigned int code)
 {
-	printf("Connected with %s on port %d\n", ip, port);
+	unsigned int err = 0;
+	const char *str = NULL;
+	if((err = ECErrorCodeToString(code, &str)))
+	{
+		ECErrorCodeToString(err, &str);
+		code = err;
+	}
+	printf("%s(Code: %d)\n", str, code);
 }
 
-void DataReceived(ECClient *client, char *ip, int port, int nsize, void *data)
+void die(unsigned int code)
 {
-	printf("%s(Port: %d):'", ip, port);
-	for(int i = 0; i < nsize; ++i)
-		printf("%c", ((char*)data)[i]);
-	puts("'");
-
-	int err = 0;
-	if((err = ECServer_Send(&server, NULL, NULL, client->clientfd, 5, "World")))
-		printf("%s(Code: %d)\n", ECErrorCodeToString(err), err);
+	logErr(code);
+	exit(code);
 }
 
-void ClientDisconnected(char *ip, int port)
+void dataReceived(ECClient *client, char *ip, int port, int nsize, void *data)
 {
-	printf("%s(Port: %d) disconnected!\n", ip, port);
+	printf("Receieved message from client %s:%d\n\"%.*s\"\n", ip, port, nsize, data);
+}
+
+void connectionCreated(char *ip, int port)
+{
+	printf("Incoming connection from %s:%d\n", ip, port);
+
+	unsigned int err = 0;
+	if((err = ECServer_Send(&server, NULL, ip, -1, 5, "Pong")))
+		logErr(err);
 }
 
 int main(int argc, char **argv)
 {
+	ecConfig config = { 0 };
 	unsigned int err = 0;
+	if((err = ECParseArgs(&config, argc, argv)))
+		die(err);
 
-	if((err = InitEC(argc, argv)))
-	{
-		printf("%s(Code:%d)\n", ECErrorCodeToString(err), err);
-		return 1;
-	}
+	if((err = ECServer_Start(&server, &config, TCP, 16380, 5)))
+		die(err);
 
-	ECServer_OnConnectionCreate(ClientConnected);
-	ECServer_OnDataReceive(DataReceived);
-	ECServer_OnConnectionTerminated(ClientDisconnected);
+	ECServer_OnConnectionCreate(connectionCreated);
+	ECServer_OnDataReceive(dataReceived);
 
-	if((err = ECServer_Start(&server, TCP, 16380, 5)))
-	{
-		printf("%s(Code:%d)\n", ECErrorCodeToString(err), err);
-		return 2;
-	}
 	getchar();
+	if((err = ECServer_Shutdown(&server)))
+		die(err);
+
 	return 0;
 }
