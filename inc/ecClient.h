@@ -15,6 +15,7 @@ typedef struct
 {
 	int clientfd;
 	struct sockaddr_in inet_addr;
+	struct sockaddr_in6 inet6_addr;
 	ecConfig *config;
 #ifdef __unix__
 	pthread_t processingThread;

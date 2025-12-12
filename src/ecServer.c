@@ -23,9 +23,6 @@ static ECSERVERDATARECEIVEPROC serverDataProc = NULL;
 static ECSERVERCONNECTIONCREATEPROC serverConnCreateProc = NULL;
 static ECSERVERCONNECTIONTERMINATEDPROC serverConnTermProc = NULL;
 
-extern unsigned int ipToStr(in_addr_t ip, char *str);
-extern unsigned int strToIP(in_addr_t *addr, char *ip);
-
 static void ECServerReadData(ECServer *server, int clientIdx, unsigned char *initial, unsigned char **data, int *pkgLen)
 {
 	*data = malloc(1024);
@@ -33,10 +30,10 @@ static void ECServerReadData(ECServer *server, int clientIdx, unsigned char *ini
 		return;
 
 	memcpy(*data, initial, *pkgLen);
-	int pkgCapacity = 1024, prevBytesRead;
-	while((*pkgLen = read(server->clients[clientIdx].clientfd, *data + (pkgCapacity << 1), (pkgCapacity << 1))) > 0)
+	int pkgCapacity = 512; // pkgCapacity always hold half of the actual capacity (can be practically seen as the package length so far)
+	while((*pkgLen = read(server->clients[clientIdx].clientfd, *data + pkgCapacity, pkgCapacity)) >= pkgCapacity)
 	{
-		unsigned char *tmp = realloc(*data, pkgCapacity << 1);
+		unsigned char *tmp = realloc(*data, pkgCapacity << 2); // multiply by 4 to achieve the same effect as if we held the actual capacity
 		if(!tmp)
 		{
 			free(*data);
@@ -45,11 +42,9 @@ static void ECServerReadData(ECServer *server, int clientIdx, unsigned char *ini
 		}
 
 		*data = tmp;
-		pkgCapacity <<= 1;
-		prevBytesRead = *pkgLen;
+		pkgCapacity <<= 1; // we only multiply by 2 because we want to only hold half the actual capacity
 	}
-
-	*pkgLen = (pkgCapacity << 1) + prevBytesRead;
+	*pkgLen = pkgCapacity + *pkgLen;
 }
 
 static void ECServerRelayData(ECServer *server, int clientIdx, void *data, int pkgLen)
@@ -57,9 +52,18 @@ static void ECServerRelayData(ECServer *server, int clientIdx, void *data, int p
 	if(!serverDataProc || !data)
 		return;
 
-	char ip[16] = { 0 };
-	ipToStr(ntohl(server->clients[clientIdx].inet_addr.sin_addr.s_addr), ip);
-	serverDataProc(server, &server->clients[clientIdx], ip, ntohs(server->clients[clientIdx].inet_addr.sin_port), pkgLen, data);
+	if(server->config->ipv == 4)
+	{
+		char ip[16] = { 0 };
+		ipv42str(server->clients[clientIdx].inet_addr.sin_addr, ip);
+		serverDataProc(server, &server->clients[clientIdx], ip, ntohs(server->clients[clientIdx].inet_addr.sin_port), pkgLen, data);
+	}
+	else if(server->config->ipv == 6)
+	{
+		char ip[40] = { 0 };
+		ipv62str(server->clients[clientIdx].inet6_addr.sin6_addr, ip);
+		serverDataProc(server, &server->clients[clientIdx], ip, ntohs(server->clients[clientIdx].inet6_addr.sin6_port), pkgLen, data);
+	}
 }
 
 static void ECServerHandleDisconnect(ECServer *server, int clientIdx)
@@ -71,9 +75,18 @@ static void ECServerHandleDisconnect(ECServer *server, int clientIdx)
 		return;
 	}
 
-	char ip[16] = { 0 };
-	ipToStr(ntohl(server->clients[clientIdx].inet_addr.sin_addr.s_addr), ip);
-	serverConnTermProc(server, ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
+	if(server->config->ipv == 4)
+	{
+		char ip[16] = { 0 };
+		ipv42str(server->clients[clientIdx].inet_addr.sin_addr, ip);
+		serverConnTermProc(server, ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
+	}
+	else if(server->config->ipv == 6)
+	{
+		char ip[40] = { 0 };
+		ipv62str(server->clients[clientIdx].inet6_addr.sin6_addr, ip);
+		serverConnTermProc(server, ip, ntohs(server->clients[clientIdx].inet6_addr.sin6_port));
+	}
 }
 
 static void ECServerHandlePackage(ECServer *server, int clientIdx)
@@ -107,9 +120,18 @@ static void ECServerCreateConnection(ECServer *server, int clientIdx)
 	if(!serverConnCreateProc)
 		return;
 
-	char ip[16] = { 0 };
-	ipToStr(ntohl(server->clients[clientIdx].inet_addr.sin_addr.s_addr), ip);
-	serverConnCreateProc(server, ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
+	if(server->config->ipv == 4)
+	{
+		char ip[16] = { 0 };
+		ipv42str(server->clients[clientIdx].inet_addr.sin_addr, ip);
+		serverConnCreateProc(server, ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
+	}
+	else if(server->config->ipv == 6)
+	{
+		char ip[40] = { 0 };
+		ipv62str(server->clients[clientIdx].inet6_addr.sin6_addr, ip);
+		serverConnCreateProc(server, ip, ntohs(server->clients[clientIdx].inet6_addr.sin6_port));
+	}
 }
 
 static void ServerTCP_Process(ECServer *server)
@@ -146,7 +168,6 @@ static void ServerUDP_Process(ECServer *server)
 	struct sockaddr_in client_addr = { 0 };
 	socklen_t clientlen = sizeof(client_addr);
 
-	char ip[16] = { 0 };
 	ECClient client = {
 		.clientfd = -1,
 		.inet_addr = { 0 }
@@ -158,10 +179,23 @@ static void ServerUDP_Process(ECServer *server)
 		if((pkgLen = recvfrom(server->serverfd, server->config->receiveBuffer, server->config->receiveBufferSize, 0, (struct sockaddr*)&client.inet_addr, &clientlen)) < 0)
 			continue;
 
-		if(serverDataProc)
+		if(!serverDataProc)
 		{
-			ipToStr(ntohl(client.inet_addr.sin_addr.s_addr), ip);
+			memset(server->config->receiveBuffer, 0, pkgLen);
+			return;
+		}
+
+		if(server->config->ipv == 4)
+		{
+			char ip[16] = { 0 };
+			ipv42str(client.inet_addr.sin_addr, ip);
 			serverDataProc(server, &client, ip, ntohs(client.inet_addr.sin_port), pkgLen, server->config->receiveBuffer);
+		}
+		else if(server->config->ipv == 6)
+		{
+			char ip[40] = { 0 };
+			ipv62str(client.inet6_addr.sin6_addr, ip);
+			serverDataProc(server, &client, ip, ntohs(client.inet6_addr.sin6_port), pkgLen, server->config->receiveBuffer);
 		}
 		memset(server->config->receiveBuffer, 0, pkgLen);
 	}
@@ -189,14 +223,28 @@ unsigned int ECServer_Start(ECServer *server, ecConfig *config, ECenum connectio
 	if((config->ipv != 4 && config->ipv != 6) || maxClients <= 0 || port <= 0)
 		return EC_ERR_INVALID_ARGUMENT;
 
-	memset(&server->server_addr, 0, sizeof(server->server_addr));
-	server->server_addr.sin_family = config->ipv == 4 ? AF_INET : AF_INET6;
-	server->server_addr.sin_addr.s_addr = INADDR_ANY;
-	server->server_addr.sin_port = htons(port);
-	server->maxClientCount = maxClients;
+	if(config->ipv == 4)
+	{
+		memset(&server->server_addr, 0, sizeof(server->server_addr));
+		server->server_addr.sin_family = AF_INET;
+		server->server_addr.sin_addr.s_addr = INADDR_ANY;
+		server->server_addr.sin_port = htons(port);
+		server->maxClientCount = maxClients;
 
-	if(bind((server->serverfd = socket(server->server_addr.sin_family, connectionType, 0)), (struct sockaddr*)&server->server_addr, sizeof(server->server_addr)) < 0)
-		return EC_ERR_NETWORK;
+		if(bind((server->serverfd = socket(AF_INET, connectionType, 0)), (struct sockaddr*)&server->server_addr, sizeof(server->server_addr)) < 0)
+			return EC_ERR_NETWORK;
+	}
+	else if(config->ipv == 6)
+	{
+		memset(&server->server_addr, 0, sizeof(server->server6_addr));
+		server->server6_addr.sin6_family = AF_INET6;
+		memset(&server->server6_addr.sin6_addr.s6_addr, 0, sizeof(server->server6_addr.sin6_addr.s6_addr)); // effectively INADDR_ANY
+		server->server6_addr.sin6_port = htons(port);
+		server->maxClientCount = maxClients;
+
+		if(bind((server->serverfd = socket(AF_INET6, connectionType, 0)), (struct sockaddr*)&server->server6_addr, sizeof(server->server6_addr)) < 0)
+			return EC_ERR_NETWORK;
+	}
 
 	// Start connecting and receiving thread
 	server->config = config;
@@ -279,15 +327,14 @@ unsigned int ECServer_Send(ECServer *server, ECClient *client, char *ip, int fd,
 	}
 	else if(ip)
 	{
-		in_addr_t ip_addr = 0;
+		struct in_addr ip_addr = { 0 };
 		unsigned int err = 0;
-		if((err = strToIP(&ip_addr, ip)))
+		if((err = str2ipv4(ip, &ip_addr)))
 			return err;
 
-		ip_addr = htonl(ip_addr);
 		for(int i = 0; i < server->clientCount; ++i)
 		{
-			if(server->clients[i].inet_addr.sin_addr.s_addr != ip_addr)
+			if(server->clients[i].inet_addr.sin_addr.s_addr != ip_addr.s_addr)
 				continue;
 			SendToSocketByIdx(server, i, nsize, data);
 			return EC_ERR_SUCCESS;
@@ -329,15 +376,14 @@ unsigned int ECServer_Kick(ECServer *server, ECClient *client, char *ip, int fd)
 	}
 	else if(ip)
 	{
-		in_addr_t ip_addr = 0;
+		struct in_addr ip_addr = { 0 };
 		unsigned int err = 0;
-		if((err = strToIP(&ip_addr, ip)))
+		if((err = str2ipv4(ip, &ip_addr)))
 			return err;
 
-		ip_addr = htonl(ip_addr);
 		for(int i = 0; i < server->clientCount; ++i)
 		{
-			if(server->clients[i].inet_addr.sin_addr.s_addr != ip_addr)
+			if(server->clients[i].inet_addr.sin_addr.s_addr != ip_addr.s_addr)
 				continue;
 			CloseSocketByIdx(server, i);
 			return EC_ERR_SUCCESS;

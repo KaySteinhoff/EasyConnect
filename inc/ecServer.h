@@ -18,6 +18,7 @@ typedef struct
 	int maxClientCount, clientCount;
 	ECClient *clients;
 	struct sockaddr_in server_addr;
+	struct sockaddr_in6 server6_addr;
 	ecConfig *config;
 #ifdef __unix__
 	pthread_t processingThread;

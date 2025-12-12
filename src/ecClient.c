@@ -22,9 +22,6 @@
 static ECCLIENTDATARECEIVEPROC clientDataProc = NULL;
 static ECCLIENTCONNECTIONTERMINATEDPROC clientConnTermProc = NULL;
 
-extern unsigned int ipToStr(in_addr_t ip, char *str);
-extern unsigned int strToIP(in_addr_t *addr, char *ip);
-
 static void ECClientHandleDisconnect(ECClient *client)
 {
 	if(!clientConnTermProc)
@@ -39,10 +36,10 @@ static void ECClientReadData(ECClient *client, unsigned char *initial, unsigned 
 		return;
 
 	memcpy(*data, initial, *pkgLen);
-	int pkgCapacity = 1024, prevBytesRead = 0;
-	while((*pkgLen = read(client->clientfd, *data + (pkgCapacity << 1), (pkgCapacity << 1))) > 0)
+	int pkgCapacity = 512; // pkgCapacity always hold half of the actual capacity (can be practically seen as the package length so far)
+	while((*pkgLen = read(client->clientfd, *data + pkgCapacity, pkgCapacity)) >= pkgCapacity)
 	{
-		unsigned char *tmp = realloc(*data, pkgCapacity << 1);
+		unsigned char *tmp = realloc(*data, pkgCapacity << 2); // multiply by 4 to achieve the same effect as if we held the actual capacity
 		if(!tmp)
 		{
 			free(*data);
@@ -51,10 +48,9 @@ static void ECClientReadData(ECClient *client, unsigned char *initial, unsigned 
 		}
 
 		*data = tmp;
-		pkgCapacity <<= 1;
-		prevBytesRead = *pkgLen;
+		pkgCapacity <<= 1; // we only multiply by 2 because we want to only hold half the actual capacity
 	}
-	*pkgLen = (pkgCapacity << 1) + prevBytesRead;
+	*pkgLen = pkgCapacity + *pkgLen;
 }
 
 static void ECClientRelayData(ECClient *client, int pkgLen, unsigned char *data)
@@ -127,16 +123,29 @@ unsigned int ECClient_Connect(ECClient *client, ecConfig *config, ECenum connect
 		return EC_ERR_NULL_REFERENCE;
 
 	unsigned int err = 0;
-	in_addr_t addr = 0;
-	if((err = strToIP(&addr, ip)))
-		return err;
+	if(config->ipv == 4)
+	{
+		struct in_addr addr = { 0 };
+		if((err = str2ipv4(ip, &addr)))
+			return err;
 
-	memset(&client->inet_addr, 0, sizeof(client->inet_addr));
-	client->inet_addr.sin_family = AF_INET;
-	client->inet_addr.sin_addr.s_addr = htonl(addr);
-	client->inet_addr.sin_port = htons(port);
+		memset(&client->inet_addr, 0, sizeof(client->inet_addr));
+		client->inet_addr.sin_family = AF_INET;
+		client->inet_addr.sin_addr = addr;
+		client->inet_addr.sin_port = htons(port);
+	} else if(config->ipv == 6)
+	{
+		struct in6_addr addr = { 0 };
+		if((err = str2ipv6(ip, &addr)))
+			return err;
 
-	if((client->clientfd = socket(AF_INET, connectionType, 0)) < 0)
+		memset(&client->inet_addr, 0, sizeof(client->inet6_addr));
+		client->inet6_addr.sin6_family = AF_INET6;
+		client->inet6_addr.sin6_addr = addr;
+		client->inet6_addr.sin6_port = htons(port);
+	}
+
+	if((client->clientfd = socket(config->ipv == 4 ? AF_INET : AF_INET6, connectionType, 0)) < 0)
 		return EC_ERR_NETWORK;
 
 	if(connectionType == TCP && connect(client->clientfd, (struct sockaddr*)&client->inet_addr, sizeof(client->inet_addr)) < 0)
