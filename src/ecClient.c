@@ -7,6 +7,8 @@
 	#include <unistd.h>
 	#include <sys/fcntl.h>
 	#include <pthread.h>
+	#include <signal.h>
+	#include <sys/signalfd.h>
 #elif defined(__WIN32)
 	#include <windows.h>
 	#include <winsock2.h>
@@ -133,6 +135,12 @@ unsigned int ECClient_Connect(ECClient *client, ecConfig *config, ECenum connect
 		client->inet_addr.sin_family = AF_INET;
 		client->inet_addr.sin_addr = addr;
 		client->inet_addr.sin_port = htons(port);
+
+		if((client->clientfd = socket(AF_INET, connectionType, 0)) < 0)
+			return EC_ERR_NETWORK;
+
+		if(connectionType == TCP && connect(client->clientfd, (struct sockaddr*)&client->inet_addr, sizeof(client->inet_addr)) < 0)
+			return EC_ERR_NETWORK;
 	} else if(config->ipv == 6)
 	{
 		struct in6_addr addr = { 0 };
@@ -143,13 +151,13 @@ unsigned int ECClient_Connect(ECClient *client, ecConfig *config, ECenum connect
 		client->inet6_addr.sin6_family = AF_INET6;
 		client->inet6_addr.sin6_addr = addr;
 		client->inet6_addr.sin6_port = htons(port);
+
+		if((client->clientfd = socket(AF_INET6, connectionType, 0)) < 0)
+			return EC_ERR_NETWORK;
+
+		if(connectionType == TCP && connect(client->clientfd, (struct sockaddr*)&client->inet6_addr, sizeof(client->inet6_addr)) < 0)
+			return EC_ERR_NETWORK;
 	}
-
-	if((client->clientfd = socket(config->ipv == 4 ? AF_INET : AF_INET6, connectionType, 0)) < 0)
-		return EC_ERR_NETWORK;
-
-	if(connectionType == TCP && connect(client->clientfd, (struct sockaddr*)&client->inet_addr, sizeof(client->inet_addr)) < 0)
-		return EC_ERR_NETWORK;
 
 	// Start receiving thread
 	client->config = config;
@@ -171,7 +179,6 @@ unsigned int ECClient_Send(ECClient *client, int nsize, void *data)
 	else if(type == UDP && sendto(client->clientfd, data, nsize, 0, (const struct sockaddr*)&client->inet_addr, sizeof(client->inet_addr)) != nsize)
 		return EC_ERR_NETWORK;
 
-	pthread_cancel(client->processingThread);
 	return EC_ERR_SUCCESS;
 }
 
@@ -181,6 +188,7 @@ unsigned int ECClient_Disconnect(ECClient *client)
 		return EC_ERR_NULL_REFERENCE;
 
 	close(client->clientfd);
+	pthread_cancel(client->processingThread);
 	return EC_ERR_SUCCESS;
 }
 

@@ -36,7 +36,7 @@ int main(int argc, char **argv)
 		die(err);
 
 	ECClient client = { 0 };
-	if((err = ECClient_Connect(&client, &config, TCP, "127.0.0.1", 16380)))
+	if((err = ECClient_Connect(&client, &config, TCP, argv[1], 16380)))
 		die(err);
 
 	ECClient_OnDataReceive(dataReceived);

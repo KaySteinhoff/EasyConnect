@@ -115,22 +115,30 @@ static void ECServerHandlePackage(ECServer *server, int clientIdx)
 	}
 }
 
-static void ECServerCreateConnection(ECServer *server, int clientIdx)
+static void ECServerCreateConnection(ECServer *server, int connectedfd, struct sockaddr *addr)
 {
-	if(!serverConnCreateProc)
-		return;
+	server->clients[server->clientCount].clientfd = connectedfd;
+	server->clientCount++;
 
 	if(server->config->ipv == 4)
 	{
+		server->clients[server->clientCount - 1].inet_addr = *((struct sockaddr_in*)addr);
+
+		if(!serverConnCreateProc)
+			return;
 		char ip[16] = { 0 };
-		ipv42str(server->clients[clientIdx].inet_addr.sin_addr, ip);
-		serverConnCreateProc(server, ip, ntohs(server->clients[clientIdx].inet_addr.sin_port));
+		ipv42str(server->clients[server->clientCount - 1].inet_addr.sin_addr, ip);
+		serverConnCreateProc(server, ip, ntohs(server->clients[server->clientCount - 1].inet_addr.sin_port));
 	}
 	else if(server->config->ipv == 6)
 	{
+		server->clients[server->clientCount - 1].inet6_addr = *((struct sockaddr_in6*)addr);
+
+		if(!serverConnCreateProc)
+			return;
 		char ip[40] = { 0 };
-		ipv62str(server->clients[clientIdx].inet6_addr.sin6_addr, ip);
-		serverConnCreateProc(server, ip, ntohs(server->clients[clientIdx].inet6_addr.sin6_port));
+		ipv62str(server->clients[server->clientCount - 1].inet6_addr.sin6_addr, ip);
+		serverConnCreateProc(server, ip, ntohs(server->clients[server->clientCount - 1].inet6_addr.sin6_port));
 	}
 }
 
@@ -139,9 +147,14 @@ static void ServerTCP_Process(ECServer *server)
 	int fdFlags = fcntl(server->serverfd, F_GETFL, 0);
 	fcntl(server->serverfd, F_SETFL, fdFlags | O_NONBLOCK);
 
-	struct sockaddr_in client_addr = { 0 };
-	socklen_t clientlen = sizeof(client_addr);
+	struct sockaddr_in ipv4_addr = { 0 };
+	struct sockaddr_in6 ipv6_addr = { 0 };
 
+	struct sockaddr *client_addr = (struct sockaddr*)&ipv4_addr;
+	if(server->config->ipv == 6)
+		client_addr = (struct sockaddr*)&ipv6_addr;
+
+	socklen_t clientlen = sizeof(client_addr);
 	int connectedfd = 0;
 	ECClient clients[server->maxClientCount];
 	server->clients = clients;
@@ -150,12 +163,8 @@ static void ServerTCP_Process(ECServer *server)
 	while(1)
 	{
 		// Check if any connection request was made
-		while((connectedfd = accept(server->serverfd, (struct sockaddr*)&client_addr, &clientlen)) > 0)
-		{
-			clients[server->clientCount].clientfd = connectedfd;
-			clients[server->clientCount++].inet_addr = client_addr;
-			ECServerCreateConnection(server, server->clientCount - 1);
-		}
+		while((connectedfd = accept(server->serverfd, client_addr, &clientlen)) > 0)
+			ECServerCreateConnection(server, connectedfd, client_addr);
 
 		// Poll received packages
 		for(int i = 0; i < server->clientCount; ++i)
@@ -275,13 +284,48 @@ unsigned int ECServer_Shutdown(ECServer *server)
 
 static void CloseSocketByIdx(ECServer *server, int idx)
 {
-	close(server->clients[idx].clientfd);
-	server->clients[idx] = server->clients[--server->clientCount];
 }
 
-static void SendToSocketByIdx(ECServer *server, int idx, int nsize, void *data)
+static ECClient* ECServerGetClient(ECServer *server, ECClient *client, char *ip, int fd)
 {
-	write(server->clients[idx].clientfd, data, nsize);
+	if(!server)
+		return NULL;
+
+	if(client)
+		return client;
+
+	if(fd >= 0)
+	{
+		for(int i = 0; i < server->clientCount; ++i)
+			if(server->clients[i].clientfd == fd)
+				return &server->clients[i];
+		return NULL;
+	}
+
+	if(server->config->ipv == 4)
+	{
+		struct in_addr ipv4_addr = { 0 };
+		unsigned int err = 0;
+		if((err = str2ipv4(ip, &ipv4_addr)))
+			return NULL;
+
+		for(int i = 0; i < server->clientCount; ++i)
+			if(server->clients[i].inet_addr.sin_addr.s_addr == ipv4_addr.s_addr)
+				return &server->clients[i];
+
+		return NULL;
+	}
+
+	struct in6_addr ipv6_addr = { 0 };
+	unsigned int err = 0;
+	if((err = str2ipv6(ip, &ipv6_addr)))
+		return NULL;
+
+	for(int i = 0; i < server->clientCount; ++i)
+		if(!strcmp(server->clients[i].inet6_addr.sin6_addr.s6_addr, ipv6_addr.s6_addr))
+			return &server->clients[i];
+
+	return NULL;
 }
 
 unsigned int ECServer_Send(ECServer *server, ECClient *client, char *ip, int fd, int nsize, void *data)
@@ -303,46 +347,11 @@ unsigned int ECServer_Send(ECServer *server, ECClient *client, char *ip, int fd,
 	if(!server->clients)
 		return EC_ERR_NULL_REFERENCE;
 
-	if(fd >= 0)
-	{
-		for(int i = 0; i < server->clientCount; ++i)
-		{
-			if(server->clients[i].clientfd != fd)
-				continue;
-			SendToSocketByIdx(server, i, nsize, data);
-			return EC_ERR_SUCCESS;
-		}
-		return EC_ERR_INVALID_ARGUMENT;
-	}
-	else if(client)
-	{
-		for(int i = 0; i < server->clientCount; ++i)
-		{
-			if(&server->clients[i] != client)
-				continue;
-			SendToSocketByIdx(server, i, nsize, data);
-			return EC_ERR_SUCCESS;
-		}
-		return EC_ERR_INVALID_ARGUMENT;
-	}
-	else if(ip)
-	{
-		struct in_addr ip_addr = { 0 };
-		unsigned int err = 0;
-		if((err = str2ipv4(ip, &ip_addr)))
-			return err;
-
-		for(int i = 0; i < server->clientCount; ++i)
-		{
-			if(server->clients[i].inet_addr.sin_addr.s_addr != ip_addr.s_addr)
-				continue;
-			SendToSocketByIdx(server, i, nsize, data);
-			return EC_ERR_SUCCESS;
-		}
-		return EC_ERR_INVALID_ARGUMENT;
-	}
-	else
+	client = ECServerGetClient(server, client, ip, fd);
+	if(!client)
 		return EC_ERR_INVALID_OPERATION;
+
+	write(client->clientfd, data, nsize);
 
 	return EC_ERR_SUCCESS;
 }
@@ -352,7 +361,7 @@ unsigned int ECServer_Kick(ECServer *server, ECClient *client, char *ip, int fd)
 	if(!server || !server->clients)
 		return EC_ERR_NULL_REFERENCE;
 
-	if(fd >= 0)
+/*	if(fd >= 0)
 	{
 		for(int i = 0; i < server->clientCount; ++i)
 		{
@@ -392,8 +401,22 @@ unsigned int ECServer_Kick(ECServer *server, ECClient *client, char *ip, int fd)
 	}
 	else
 		return EC_ERR_INVALID_OPERATION;
+*/
+	client = ECServerGetClient(server, client, ip, fd);
+	if(!client)
+		return EC_ERR_INVALID_OPERATION;
 
-	return EC_ERR_SUCCESS;
+	for(int i = 0; i < server->clientCount; ++i)
+	{
+		if(client != &server->clients[i])
+			continue;
+
+		close(client->clientfd);
+		server->clients[i] = server->clients[--server->clientCount];
+		return EC_ERR_SUCCESS;
+	}
+
+	return EC_ERR_INVALID_ARGUMENT;
 }
 
 ECSERVERDATARECEIVEPROC ECServer_OnDataReceive(ECSERVERDATARECEIVEPROC newHandler)

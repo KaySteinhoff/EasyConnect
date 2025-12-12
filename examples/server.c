@@ -1,6 +1,7 @@
 #include <ec.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 void logErr(unsigned int code)
 {
@@ -23,15 +24,15 @@ void die(unsigned int code)
 void dataReceived(ECServer *server, ECClient *client, char *ip, int port, int nsize, void *data)
 {
 	printf("Receieved message from client %s:%d\n\"%.*s\"\n", ip, port, nsize, data);
+
+	unsigned int err = 0;
+	if((err = ECServer_Send(server, NULL, ip, -1, 5, "Pong")))
+		logErr(err);
 }
 
 void connectionCreated(ECServer *server, char *ip, int port)
 {
 	printf("Incoming connection from %s:%d\n", ip, port);
-
-	unsigned int err = 0;
-	if((err = ECServer_Send(server, NULL, ip, -1, 5, "Pong")))
-		logErr(err);
 }
 
 int main(int argc, char **argv)
